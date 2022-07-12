@@ -1,0 +1,21 @@
+L1: EQU 1
+LABEL2: EQU -1
+LAB0: EQU 0
+
+DEVEM_APARECER_4_A
+
+IF L1
+    A
+IF LABEL2
+    A
+IF LAB0
+    A
+IF LAB0
+    A
+IF LABEL2
+    A
+IF LAB0
+    A
+IF L1
+    A
+
