@@ -17,7 +17,7 @@ string clean_code(string dirty_code) {
 
   vector<pair<regex, string>> regex_vec;
 
-  regex_vec.push_back({regex("\r") , "\n"}); // remove comentarios
+  regex_vec.push_back({regex("\r") , "\n"}); // formata strings do linux
   regex_vec.push_back({regex("[\n ]*;(.*?)[\n]") , "\n"}); // remove comentarios
   regex_vec.push_back({regex(" +")               , " " }); // remove espacos redundantes
   regex_vec.push_back({regex(" ?\n+ ?")          , "\n"}); 
@@ -57,10 +57,7 @@ vector<string> string_split (string input, string delim = "\n")
   return inst;
 }
 
-string passage_zero(string code) {
-  code = clean_code(code);
-  transform(code.begin(), code.end(), code.begin(), ::toupper); // bota tudo em caso superior
-  
+string sub_equ_if(string code){
   vector<string> instructions = string_split(code);
   
   map<string, string> equ_labels;
@@ -118,6 +115,13 @@ string passage_zero(string code) {
   }
 
   return new_code;
+}
+
+string passage_zero(string code) {
+  code = clean_code(code);
+  transform(code.begin(), code.end(), code.begin(), ::toupper); // bota tudo em caso superior
+  return sub_equ_if(code);
+  
 }
 
 int main () {
