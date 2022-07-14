@@ -15,6 +15,20 @@ using namespace std;
 // nome da diretiva -> num_end
 map<string, int> diretives;
 
+void initialize_diretives_table();
+void print_table(map<string, int> table);
+void initialize_opcode_table();
+string clean_code(string dirty_code);
+vector<string> string_split (string input, string delim);
+string sub_equ_if(string code);
+string passage_zero(string code);
+vector<int> passage_two(string code, map<string, int> symbol_table);
+bool lexical_validation(string str);
+tuple< map<string, int>, map<string, int>, map<string, vector<int>> > passage_one(string code);
+void print_use_table(map<string, vector<int>> table);
+void batch_run();
+void run(string path);
+
 void initialize_diretives_table()
 {
 	diretives["BEGIN"]  = 0;
@@ -28,6 +42,16 @@ void initialize_diretives_table()
 
 // nome da instr -> {opcode, num_args}
 map<string, pair<int, int>> opcodes;
+
+
+void print_table(map<string, int> table)
+{
+	map<string, int>::iterator it;
+	for (it = table.begin(); it != table.end(); it++)
+	{
+		cout << it->first << " " << + it->second << endl;
+	}
+}
 
 void initialize_opcode_table() {
 	opcodes["ADD"] = 		{1, 2};
@@ -207,8 +231,6 @@ vector<int> passage_two(string code, map<string, int> symbol_table) {
 				
 				else
 					num = stoi(instr_parse[1]);
-
-				cout << "Num: " << num << endl;
 				obj_code.push_back(num);
 			}
 
@@ -232,12 +254,36 @@ bool lexical_validation(string str)
 	return ! regex_match (str, regex_exp);
 }
 
-map<string, int> passage_one(string code)
+/*
+	Summary: primeira passagem do algoritmo de duas passagens
+		Faz a contagem dos rotulos e detecta os seguintes erros:
+			Declaracoes ou rotulos repetidos
+			Tokens invalidos
+			Dois rotulos na mesma linha
+			Instrucoes ou diretivas nas secoes erradas
+			Uso de instrucoes/diretivas que nao existem
+			Falta de secao de texto. 
+
+	Input:
+		string: codigo a ser avaliado (ja pre-procesado)
+	Returns:
+		Tripla, na seguinte ordem:
+		map<string, int> tabela de simbolos
+		map<string, int> tabela de definicoes
+		map<string, int> tabela de uso
+*/
+tuple< map<string, int>, map<string, int>, map<string, vector<int>> > passage_one(string code)
 {
 	int pos_counter = 0;
+	code = regex_replace(code, regex(","), "");
 	vector<string> lines = string_split(code);
+
 	map<string, int> symbol_table;
-	
+	map<string, int> definition_table;
+	map<string, vector<int>> use_table;
+
+	map<string, bool> extern_labels;
+
 	bool data_flag = false;
 	bool text_flag = false;
 	
@@ -276,13 +322,19 @@ map<string, int> passage_one(string code)
 			}else
 			{
 				symbol_table[label] = pos_counter;
+
+				vector<string> tokenized_instruction = string_split(instruction, " ");
+
+				if(tokenized_instruction[0] == "EXTERN")
+				{
+					extern_labels[label] = true;
+				}
 			}
 		}
 
 		tokens = string_split(instruction, " ");
-		string op = tokens[0];
 
-		if(op == "SECAO")
+		if(tokens[0] == "SECAO")
 		{
 			if (tokens[1] == "TEXTO")
 				text_flag = true;
@@ -291,12 +343,32 @@ map<string, int> passage_one(string code)
 				data_flag = true;
 		}
 
+		string op = tokens[0];
 		if(opcodes.count(op) > 0)
 		{
 			if (data_flag)
 			{
 				cout << "Erro semantico: instrucao na secao de dados na linha " << line_counter + 1 << endl;
 				throw("Erro semantico");
+			}
+			
+			if(tokens.size() > 1)
+			{
+				// Nao eh stop
+				if(extern_labels.count(tokens[1]) > 0)
+				{
+					use_table[tokens[1]].push_back(pos_counter + 1);
+				}
+			}
+
+			if(tokens.size() > 2)
+			{
+				// Eh copy
+				if(extern_labels.count(tokens[2]) > 0)
+				{
+					//eh label externa, deve ir para a tabela de uso
+					use_table[tokens[2]].push_back(pos_counter + 2);
+				}
 			}
 
 			pos_counter += opcodes[op].second;
@@ -307,6 +379,10 @@ map<string, int> passage_one(string code)
 			{
 				cout << "Erro semantico: diretivas CONST ou SPACE utilizadas fora do segmento de dados na linha " << line_counter + 1 << endl;
 				throw("Erro semantico");
+			}else
+			if(op == "PUBLIC")
+			{
+				definition_table[tokens[1]] = pos_counter;
 			}
 			pos_counter += diretives[op];
 		}else
@@ -322,7 +398,17 @@ map<string, int> passage_one(string code)
 		throw("Erro semantico");
 	}
 
-	return symbol_table;
+	map<string, int>::iterator it;
+	for (it = definition_table.begin(); it != definition_table.end(); it++)
+	{
+		if(symbol_table.count(it->first) <= 0)
+		{
+			throw invalid_argument("A tabela de definicoes possui um simbolo que nao esta na tabela de simbolos!");
+		}
+		definition_table[it->first] = symbol_table[it->first];
+	}
+
+	return make_tuple(symbol_table, definition_table, use_table);
 }
 
 void run(string path)
@@ -340,30 +426,32 @@ void run(string path)
 
 	cout << str << endl;
 
-	map<string, int> symbol_table = passage_one(str);
-	
+	auto [symbol_table, definition_table, use_table] = passage_one(str);
+
 	cout << "\nTabela de simbolos:" << endl;
-	map<string, int>::iterator it;
-	for (it = symbol_table.begin(); it != symbol_table.end(); it++)
+	print_table(symbol_table);
+
+	cout << "\nTabela de definicoes:" << endl;
+	print_table(definition_table);
+
+	cout << "\nTabela de uso:" << endl;
+	print_use_table(use_table);
+
+	vector<int> result =  passage_two(str, symbol_table);
+	for (unsigned int i = 0; i < result.size(); i++)
 	{
-		cout << it->first << ": " << + it->second << endl;
-	}
-	cout << endl;
-
-	auto obj_code = passage_two(str, symbol_table);
-
-	for (unsigned int i = 0; i < obj_code.size(); i++) {
-		cout << obj_code[i] << " ";
+		cout << result[i] << " ";
 	}
 	cout << endl;
 }
 
 void batch_run()
 {
-	// run("test/passage_two_test1_error.asm");
-	run("test/passage_two_test2_error.asm");
-	//run("test/passage_one_test2_error.asm");
-	//run("test/passage_one_test3_error.asm");
+	run("test/fatA.asm");
+	run("test/fatB.asm");
+
+	//run("test/extern_public_test1.asm");
+	//run("test/extern_public_test2.asm");
 	//run("test/passage_one_test4_error.asm");
 	//run("test/passage_one_test5_error.asm");
 	//run("test/passage_one_test6_error.asm");
@@ -372,50 +460,28 @@ void batch_run()
 
 }
 
+
+
+void print_use_table(map<string, vector<int>> table)
+{
+	map<string, vector<int>>::iterator it;
+	for (it = table.begin(); it != table.end(); it++)
+	{
+		cout << it->first << " ";
+		for(unsigned int i = 0; i < (it->second).size(); i++)
+		{
+			cout << (it->second)[i] << " ";
+		}
+		cout << endl;
+	}
+}
+
+
 int main () {
 	initialize_opcode_table();
 	initialize_diretives_table();
 
 	batch_run();
-
-	// string str;
-	// ifstream file("test/passage_one_test1.asm");
-
-	// stringstream buffer;
-	// buffer << file.rdbuf();
-
-	// str = buffer.str();
-
-	// str = passage_zero(str);
-
-	// cout << str << endl;
-
-	// map<string, int> symbol_table = passage_one(str);
-
-	// cout << "\n\nTabela de simbolos:" << endl;
-	// map<string, int>::iterator it;
-	// for (it = symbol_table.begin(); it != symbol_table.end(); it++)
-	// {
-	// 	cout << it->first << ": " << + it->second << endl;
-	// }
-
-	// cout << "Deve dar False: " << endl;
-	// cout << lexical_validation("_TEMPO") << endl;
-	// cout << lexical_validation("_") << endl;
-	// cout << lexical_validation("L1____") << endl;
-	// cout << lexical_validation("SUB_ZERO212") << endl;
-	// cout << lexical_validation("LOOP") << endl;
-	// cout << lexical_validation("UWUW1111") << endl;
-	// cout << lexical_validation("JOAO____PEDROFELIXD745144654EALMEIDA") << endl;
-	// cout << lexical_validation("LU14CAS_DE_ALMEIDA_ARRRRRRRRR556RR") << endl;
-	// cout << "\nDeve dar True: " << endl;
-	// cout << lexical_validation("9522JOAOPEDRO") << endl;
-	// cout << lexical_validation("$9_45") << endl;
-	// cout << lexical_validation("9") << endl;
-	// cout << lexical_validation("ARR@AZZZ") << endl;
-	// cout << lexical_validation("TEMPOR$%_93") << endl;
-	// cout << lexical_validation("_%4") << endl;
-
 
 	return 0;
 }
