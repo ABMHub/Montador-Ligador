@@ -12,6 +12,20 @@
 
 using namespace std;
 
+// nome da diretiva -> num_end
+map<string, int> diretives;
+
+void initialize_diretives_table()
+{
+	diretives["BEGIN"]  = 0;
+	diretives["END"]    = 0;
+	diretives["EXTERN"] = 0;
+	diretives["PUBLIC"] = 0;
+	diretives["SECAO"]  = 0;
+	diretives["SPACE"]  = 1;
+	diretives["CONST"]  = 1;
+}
+
 // nome da instr -> {opcode, num_args}
 map<string, pair<int, int>> opcodes;
 
@@ -148,8 +162,8 @@ string passage_zero(string code) {
 vector<int> passage_two(string code, map<string, int> symbol_table) {
 	auto code_vec = string_split(code, "\n");
 	vector<int> obj_code;
-	for (int i = 0; i < code_vec.size(); i++) {
-		auto instr_parse = string_split(code, ":");
+	for (unsigned int i = 0; i < code_vec.size(); i++) {
+		auto instr_parse = string_split(code_vec[i], ":");
 		string temp;
 		if (instr_parse.size() > 1) 
 			temp = instr_parse[1];
@@ -166,7 +180,7 @@ vector<int> passage_two(string code, map<string, int> symbol_table) {
 
 			auto info = opcodes[instr_parse[0]];
 			int opcode = info.first;
-			int num_args = info.second;
+			unsigned int num_args = info.second;
 
 			if (instr_parse.size() != num_args) {
 				cout << "Erro Sintatico: numero de argumentos errados para a operacao " << instr_parse[0] << endl;
@@ -174,7 +188,7 @@ vector<int> passage_two(string code, map<string, int> symbol_table) {
 			}
 
 			obj_code.push_back(opcode);
-			for (int i = 1; i < num_args; i++) {
+			for (unsigned int i = 1; i < num_args; i++) {
 				if (symbol_table.count(instr_parse[i]) == 0) {
 					cout << "Erro Semantico: label " << instr_parse[i] << " nao definida" << endl;
 					throw invalid_argument("Erro Semantico");
@@ -185,8 +199,17 @@ vector<int> passage_two(string code, map<string, int> symbol_table) {
 
 		// diretiva
 		else {
-			if (instr_parse[0] == "CONST")
-				obj_code.push_back(stoi(instr_parse[1]));
+			if (instr_parse[0] == "CONST") {
+				int num;
+				if (instr_parse[1].size() > 2 && instr_parse[1][0] == '0' && instr_parse[1][1] == 'X') 
+					num = stoi(instr_parse[1], 0, 16);
+				
+				else
+					num = stoi(instr_parse[1]);
+
+				cout << "Num: " << num << endl;
+				obj_code.push_back(num);
+			}
 
 			else if (instr_parse[0] == "SPACE")
 				obj_code.push_back(0);
@@ -195,9 +218,117 @@ vector<int> passage_two(string code, map<string, int> symbol_table) {
 	return obj_code;
 }
 
-int main () {
+/*
+	Summary: validacao lexica seguindo as regras da linguagem C
+	Input:
+		string: objeto de avaliacao
+	Returns:
+		True se a entrada for lexicamente INVALIDA e False caso contrario
+*/
+bool lexical_validation(string str)
+{
+	regex regex_exp ("^([_A-Z][_A-Z0-9]*)");   // matches words beginning by "sub"
+	return ! regex_match (str, regex_exp);
+}
+
+map<string, int> passage_one(string code)
+{
+	int pos_counter = 0;
+	vector<string> lines = string_split(code);
+	map<string, int> symbol_table;
+	
+	bool data_flag = false;
+	bool text_flag = false;
+	
+	for(unsigned int line_counter = 0; line_counter < lines.size(); line_counter++)
+	{
+		//Verifica se tem rotulo
+		vector<string> tokens = string_split(lines[line_counter], ":");
+
+		if (tokens.size() > 2)
+		{
+			cout << "Erro sintatico, duas labels na mesma linha (" << line_counter + 1 << ")" << endl;
+			throw invalid_argument("Erro Sintatico");
+		}
+
+		string instruction = lines[line_counter];
+		
+		if (tokens.size() > 1)	//Tem rotulo
+		{
+			string label = tokens[0];
+
+			if (tokens[1][0] == ' ')
+				tokens[1].erase(0, 1);
+
+			instruction = tokens[1];
+
+			if(lexical_validation(label))
+			{
+				cout << "Erro lexico: rotulo " << label << " invalido, verifique as regras de formacao na linha " << line_counter + 1 << endl;
+				throw invalid_argument("Erro lexico");
+			}
+
+			if(symbol_table.count(label) > 0)
+			{
+				cout << "Erro semantico: rotulo " << label << " redefinido na linha " << line_counter + 1 << endl;
+				throw invalid_argument("Erro semantico");  
+			}else
+			{
+				symbol_table[label] = pos_counter;
+			}
+		}
+
+		tokens = string_split(instruction, " ");
+		string op = tokens[0];
+
+		if(op == "SECAO")
+		{
+			if (tokens[1] == "TEXTO")
+				text_flag = true;
+			
+			if (tokens[1] == "DADOS")
+				data_flag = true;
+		}
+
+		if(opcodes.count(op) > 0)
+		{
+			if (data_flag)
+			{
+				cout << "Erro semantico: instrucao na secao de dados na linha " << line_counter + 1 << endl;
+				throw("Erro semantico");
+			}
+
+			pos_counter += opcodes[op].second;
+		}else if(diretives.count(op) > 0)
+		{
+			//Executar diretiva
+			if ((op == "CONST" || op == "SPACE") && data_flag == false)
+			{
+				cout << "Erro semantico: diretivas CONST ou SPACE utilizadas fora do segmento de dados na linha " << line_counter + 1 << endl;
+				throw("Erro semantico");
+			}
+			pos_counter += diretives[op];
+		}else
+		{
+			cout << "Erro sintatico: operacao " << op << " nao encontrada!" << endl;
+			throw("Erro sintatico");
+		}
+	}
+
+	if(text_flag == false)
+	{
+		cout << "Erro semantico: nao existe secao de texto" << endl;
+		throw("Erro semantico");
+	}
+
+	return symbol_table;
+}
+
+void run(string path)
+{
+	cout << "--->>>>> " << path << endl;
 	string str;
-	ifstream file("test/equ_if_test1.asm");
+	ifstream file(path);
 
 	stringstream buffer;
 	buffer << file.rdbuf();
@@ -206,8 +337,82 @@ int main () {
 
 	str = passage_zero(str);
 
-	initialize_opcode_table();
-
 	cout << str << endl;
+
+	map<string, int> symbol_table = passage_one(str);
+	
+	cout << "\nTabela de simbolos:" << endl;
+	map<string, int>::iterator it;
+	for (it = symbol_table.begin(); it != symbol_table.end(); it++)
+	{
+		cout << it->first << ": " << + it->second << endl;
+	}
+	cout << endl;
+
+	auto obj_code = passage_two(str, symbol_table);
+
+	for (unsigned int i = 0; i < obj_code.size(); i++) {
+		cout << obj_code[i] << " ";
+	}
+	cout << endl;
+}
+
+void batch_run()
+{
+	//run("test/passage_one_test2_error.asm");
+	//run("test/passage_one_test3_error.asm");
+	//run("test/passage_one_test4_error.asm");
+	//run("test/passage_one_test5_error.asm");
+	//run("test/passage_one_test6_error.asm");
+	// run("test/passage_one_test7_error.asm");
+	run("test/passage_two_test2.asm");
+
+}
+
+int main () {
+	initialize_opcode_table();
+	initialize_diretives_table();
+
+	batch_run();
+
+	// string str;
+	// ifstream file("test/passage_one_test1.asm");
+
+	// stringstream buffer;
+	// buffer << file.rdbuf();
+
+	// str = buffer.str();
+
+	// str = passage_zero(str);
+
+	// cout << str << endl;
+
+	// map<string, int> symbol_table = passage_one(str);
+
+	// cout << "\n\nTabela de simbolos:" << endl;
+	// map<string, int>::iterator it;
+	// for (it = symbol_table.begin(); it != symbol_table.end(); it++)
+	// {
+	// 	cout << it->first << ": " << + it->second << endl;
+	// }
+
+	// cout << "Deve dar False: " << endl;
+	// cout << lexical_validation("_TEMPO") << endl;
+	// cout << lexical_validation("_") << endl;
+	// cout << lexical_validation("L1____") << endl;
+	// cout << lexical_validation("SUB_ZERO212") << endl;
+	// cout << lexical_validation("LOOP") << endl;
+	// cout << lexical_validation("UWUW1111") << endl;
+	// cout << lexical_validation("JOAO____PEDROFELIXD745144654EALMEIDA") << endl;
+	// cout << lexical_validation("LU14CAS_DE_ALMEIDA_ARRRRRRRRR556RR") << endl;
+	// cout << "\nDeve dar True: " << endl;
+	// cout << lexical_validation("9522JOAOPEDRO") << endl;
+	// cout << lexical_validation("$9_45") << endl;
+	// cout << lexical_validation("9") << endl;
+	// cout << lexical_validation("ARR@AZZZ") << endl;
+	// cout << lexical_validation("TEMPOR$%_93") << endl;
+	// cout << lexical_validation("_%4") << endl;
+
+
 	return 0;
 }
