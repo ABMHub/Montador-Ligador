@@ -160,6 +160,7 @@ string passage_zero(string code) {
 }
 
 vector<int> passage_two(string code, map<string, int> symbol_table) {
+	code = regex_replace(code, regex(","), "");
 	auto code_vec = string_split(code, "\n");
 	vector<int> obj_code;
 	for (unsigned int i = 0; i < code_vec.size(); i++) {
@@ -183,17 +184,17 @@ vector<int> passage_two(string code, map<string, int> symbol_table) {
 			unsigned int num_args = info.second;
 
 			if (instr_parse.size() != num_args) {
-				cout << "Erro Sintatico: numero de argumentos errados para a operacao " << instr_parse[0] << endl;
+				cout << "Erro Sintatico: numero de argumentos errados para a operacao " << instr_parse[0] << ". Linha: " << i+1 << endl;
 				throw invalid_argument("Erro Sintatico");
 			}
 
 			obj_code.push_back(opcode);
-			for (unsigned int i = 1; i < num_args; i++) {
-				if (symbol_table.count(instr_parse[i]) == 0) {
-					cout << "Erro Semantico: label " << instr_parse[i] << " nao definida" << endl;
+			for (unsigned int j = 1; j < num_args; j++) {
+				if (symbol_table.count(instr_parse[j]) == 0) {
+					cout << "Erro Semantico: label " << instr_parse[j] << " nao definida. Linha: " << i+1 << endl;
 					throw invalid_argument("Erro Semantico");
 				}	
-				obj_code.push_back(symbol_table[instr_parse[i]]);
+				obj_code.push_back(symbol_table[instr_parse[j]]);
 			}
 		}
 
@@ -359,13 +360,15 @@ void run(string path)
 
 void batch_run()
 {
+	// run("test/passage_two_test1_error.asm");
+	run("test/passage_two_test2_error.asm");
 	//run("test/passage_one_test2_error.asm");
 	//run("test/passage_one_test3_error.asm");
 	//run("test/passage_one_test4_error.asm");
 	//run("test/passage_one_test5_error.asm");
 	//run("test/passage_one_test6_error.asm");
 	// run("test/passage_one_test7_error.asm");
-	run("test/passage_two_test2.asm");
+	// run("test/passage_two_test2.asm");
 
 }
 
