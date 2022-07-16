@@ -30,7 +30,7 @@ void initialize_opcode_table() {
 
 struct objeto {
   vector<int> obj;
-  map<string, int> tabela_uso;
+  map<string, vector<int>> tabela_uso;
   map<string, int> tabela_def;
   set<int> relative_addr;
   int fator_correcao;
@@ -73,7 +73,7 @@ vector<string> string_split (string input, string delim = " ")
 vector<int> parse_object(string str) {
   vector<string> obj_vec = string_split(str, " ");
   vector<int> obj_int;
-  for (int i = 0; i < obj_vec.size(); i++) 
+  for (unsigned int i = 0; i < obj_vec.size(); i++) 
     obj_int.push_back(stoi(obj_vec[i]));
   
   return obj_int;
@@ -82,34 +82,24 @@ vector<int> parse_object(string str) {
 objeto parse_module(string str) {
   vector<string> obj_vec = string_split(str, "\n");
   bool t_uso = false;
-  bool t_def = false;
 
-  map<string, int> tabela_uso;
+  map<string, vector<int>> tabela_uso;
   map<string, int> tabela_def;
   vector<int> object;
 
-  for (int i = 0; i < obj_vec.size(); i++) {
-    if (obj_vec[i] == "TABELA USO") {
+  for (unsigned int i = 0; i < obj_vec.size(); i++) {
+    if (obj_vec[i] == "TABELA USO") 
       t_uso = true;
-      t_def = false;
-    }
-
-    else if (obj_vec[i] == "TABELA DEF") {
+    
+    else if (obj_vec[i] == "TABELA DEF") 
       t_uso = false;
-      t_def = true;
-    }
 
-    else if (obj_vec[i] == "") {
-      t_uso = false;
-      t_def = false;
-    }
-
-    else if (t_uso || t_def) {
+    else if (isdigit(obj_vec[i][0]) == 0) {
       vector<string> row = string_split(obj_vec[i], " ");
       string label = row[0];
       int address = stoi(row[1]);
       if (t_uso)
-        tabela_uso[label] = address;
+        tabela_uso[label].push_back(address);
 
       else
         tabela_def[label] = address;
@@ -130,53 +120,63 @@ objeto parse_module(string str) {
 
 map<string, int> create_global_table(objeto a, objeto b){
   map<string, int> ret;
-  vector<objeto> {a, b};
-  for (auto it = a.tabela_def.begin(); it != a.tabela_def.end(); ++it) {
-    string label = it->first;
-    int add = it->second + a.fator_correcao;
-    ret[label] = add;
+  vector<objeto> objs = {a, b};
+  for (unsigned int i = 0; i < objs.size(); i++) {
+    for (auto it = objs[i].tabela_def.begin(); it != objs[i].tabela_def.end(); ++it) {
+      string label = it->first;
+      int add = it->second + objs[i].fator_correcao;
+      ret[label] = add;
+    }
   }
+  return ret;
 }
 
 set<int> create_object_table(vector<int> obj) {
   set<int> relative_addr;
-  for (int i = 0; i < obj.size(); i++) {
-    int n = opcodes[obj[i]];
-    for (i += 1; i < n; i++) 
-      relative_addr.insert(obj[i]);
+  for (unsigned int i = 0; i < obj.size(); i++) {
+    unsigned int n = opcodes[obj[i]] + i;
+    i++;
+    for (; i < n && i < obj.size(); i++) 
+      relative_addr.insert(i);
     
     i--;
   }
+  return relative_addr;
 }
 
 vector<int> fix_addr(objeto data, map<string, int> tab_global) {
-  cout << "entrou" << endl;
   for (auto it = data.tabela_uso.begin(); it != data.tabela_uso.end(); ++it) {
     string label_uso = it->first;
-    int addr_uso = it->second;
-    int value_global = tab_global[label_uso];
+    vector<int> vec_uso = it->second;
+    for (unsigned int i = 0; i < vec_uso.size(); i++) {
+      int addr_uso = vec_uso[i];
+      int value_global = tab_global[label_uso];
 
-    data.obj[addr_uso] += value_global;
-    data.relative_addr.erase(addr_uso);
+      data.obj[addr_uso] += value_global;
+      data.relative_addr.erase(addr_uso);
+    }
   }
-  cout << "entrou" << endl;
   for (auto it = data.relative_addr.begin(); it != data.relative_addr.end(); ++it) 
     data.obj[*it] += data.fator_correcao;
   
-  cout << "entrou" << endl;
   return data.obj;
 }
 
 void print_result(vector<int> result) {
-  for (int i = 0; i < result.size(); i++) {
-    cout << result[i] << " ";
+  ofstream out_file;
+  out_file.open("output.bin");
+
+  for (unsigned int i = 0; i < result.size(); i++) {
+    out_file << result[i] << " ";
   }
-  cout << endl;
+
+  cout << "O programa ligado se encontra no arquivo \"output.bin\"" << endl;
 }
 
-int main () {
-  vector<string> paths = {"test/ligador_teste1_A.o", "test/ligador_teste2_B.o"};
+void link(string path1, string path2) {
+  vector<string> paths = {path1, path2};
   pair<objeto, objeto> objects;
+  initialize_opcode_table();
 
   string path = paths[0];
   string file_str = readfile(path);
@@ -184,20 +184,15 @@ int main () {
 
   path = paths[1];
   file_str = readfile(path);
-  objects.first = parse_module(file_str);
+  objects.second = parse_module(file_str);
   
-  cout << "Leu arquivos" << endl;
-
   objects.first.fator_correcao = 0;
   objects.second.fator_correcao = objects.first.obj.size();
-
 
   map<string, int> tab_global = create_global_table(objects.first, objects.second);
 
   objects.first.relative_addr = create_object_table(objects.first.obj);
   objects.second.relative_addr = create_object_table(objects.second.obj);
-
-  cout << "a" << endl;
 
   vector<int> final_obj1 = fix_addr(objects.first, tab_global);
   vector<int> final_obj2 = fix_addr(objects.second, tab_global);
@@ -205,5 +200,20 @@ int main () {
   final_obj1.insert(final_obj1.end(), final_obj2.begin(), final_obj2.end());
   
   print_result(final_obj1);
+  return;
+}
+
+int main (int argc, char** argv) {
+  vector<string> args(argc);
+  for (int i = 0; i < argc; i++) {
+    args[i] = string(argv[i]);
+  }
+
+  if (argc != 3) {
+    cout << "Passe apenas as duas paths de input para a ligacao: ./ligador myfile1.o myfile2.o" << endl << "Encerrando..." << endl;
+    return 0;
+  }
+
+  link(args[1], args[2]);
   return 0;
 }
