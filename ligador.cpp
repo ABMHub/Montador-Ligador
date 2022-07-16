@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <set>
 #include <cstring>
+#include <regex>
 
 using namespace std;
 
@@ -80,6 +81,7 @@ vector<int> parse_object(string str) {
 }
 
 objeto parse_module(string str) {
+  str = regex_replace(str, regex("\r"), "\n");
   vector<string> obj_vec = string_split(str, "\n");
   bool t_uso = false;
 

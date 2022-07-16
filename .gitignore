@@ -2,6 +2,7 @@
 *.d
 
 .vscode
+*.bin
 
 # Compiled Object files
 *.slo
