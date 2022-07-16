@@ -15,19 +15,29 @@ using namespace std;
 // nome da diretiva -> num_end
 map<string, int> diretives;
 
+// nome da instr -> {opcode, num_args}
+map<string, pair<int, int>> opcodes;
+
 void initialize_diretives_table();
-void print_table(map<string, int> table);
 void initialize_opcode_table();
-string clean_code(string dirty_code);
+
 vector<string> string_split (string input, string delim);
+
+string clean_code(string dirty_code);
 string sub_equ_if(string code);
 string passage_zero(string code);
-vector<int> passage_two(string code, map<string, int> symbol_table);
+
 bool lexical_validation(string str);
 tuple< map<string, int>, map<string, int>, map<string, vector<int>> > passage_one(string code);
-void print_use_table(map<string, vector<int>> table);
-void batch_run();
-void run(string path);
+
+string int_vector2string(vector<int> int_vector);
+string tables2string(map<string, int> def_table, map<string, vector<int>> use_table);
+string passage_two(string code, map<string, int> symbol_table);
+
+void assembler(string file_name, string obj_name);
+void pre_process(string file_name, string new_file);
+void help();
+
 
 void initialize_diretives_table()
 {
@@ -38,19 +48,6 @@ void initialize_diretives_table()
 	diretives["SECAO"]  = 0;
 	diretives["SPACE"]  = 1;
 	diretives["CONST"]  = 1;
-}
-
-// nome da instr -> {opcode, num_args}
-map<string, pair<int, int>> opcodes;
-
-
-void print_table(map<string, int> table)
-{
-	map<string, int>::iterator it;
-	for (it = table.begin(); it != table.end(); it++)
-	{
-		cout << it->first << " " << + it->second << endl;
-	}
 }
 
 void initialize_opcode_table() {
@@ -68,28 +65,6 @@ void initialize_opcode_table() {
 	opcodes["INPUT"] = 	{12, 2};
 	opcodes["OUTPUT"] = {13, 2};
 	opcodes["STOP"] = 	{14, 1};
-}
-
-string clean_code(string dirty_code) {
-	dirty_code.insert(0, "\n");
-	dirty_code.append("\n");
-
-	vector<pair<regex, string>> regex_vec;
-
-	regex_vec.push_back({regex("\r") , "\n"}); // formata strings do linux
-	regex_vec.push_back({regex("[\n ]*;(.*?)[\n]") , "\n"}); // remove comentarios
-	regex_vec.push_back({regex(" +")               , " " }); // remove espacos redundantes
-	regex_vec.push_back({regex(" ?\n+ ?")          , "\n"}); 
-	regex_vec.push_back({regex("\n+")              , "\n"});
-	regex_vec.push_back({regex(": ?\n")            , ": "}); // coloca labels na mesma linha
-	// regex_vec.push_back({regex(" ")                , "_"}); // debug
-
-	for (unsigned int i = 0; i < regex_vec.size(); i++) 
-		dirty_code = regex_replace(dirty_code, regex_vec[i].first, regex_vec[i].second);   
-
-	dirty_code.erase(0, 1);
-	dirty_code.erase(dirty_code.size()-1, 1);
-	return dirty_code;
 }
 
 vector<string> string_split (string input, string delim = "\n")
@@ -114,6 +89,28 @@ vector<string> string_split (string input, string delim = "\n")
 	}
 
 	return inst;
+}
+
+/* PASSAGEM 0 */
+string clean_code(string dirty_code) {
+	dirty_code.insert(0, "\n");
+	dirty_code.append("\n");
+
+	vector<pair<regex, string>> regex_vec;
+
+	regex_vec.push_back({regex("\r") , "\n"}); // formata strings do linux
+	regex_vec.push_back({regex("[\n ]*;(.*?)[\n]") , "\n"}); // remove comentarios
+	regex_vec.push_back({regex(" +")               , " " }); // remove espacos redundantes
+	regex_vec.push_back({regex(" ?\n+ ?")          , "\n"}); 
+	regex_vec.push_back({regex("\n+")              , "\n"});
+	regex_vec.push_back({regex(": ?\n")            , ": "}); // coloca labels na mesma linha
+
+	for (unsigned int i = 0; i < regex_vec.size(); i++) 
+		dirty_code = regex_replace(dirty_code, regex_vec[i].first, regex_vec[i].second);   
+
+	dirty_code.erase(0, 1);
+	dirty_code.erase(dirty_code.size()-1, 1);
+	return dirty_code;
 }
 
 string sub_equ_if(string code){
@@ -141,7 +138,6 @@ string sub_equ_if(string code){
 		}
 		else if(regex_match(instructions[i], regex("IF .*")))
 		{
-		
 			if(tokens.size() != 2)
 			{
 				cout << "IF utilizado incorretamente na linha " << i << endl;
@@ -165,8 +161,6 @@ string sub_equ_if(string code){
 		new_code += el + "\n";
 	}
 
-
-
 	map<string, string>::iterator it;
 	for (it = equ_labels.begin(); it != equ_labels.end(); it++)
 	{
@@ -180,67 +174,9 @@ string passage_zero(string code) {
 	code = clean_code(code);
 	transform(code.begin(), code.end(), code.begin(), ::toupper); // bota tudo em caso superior
 	return sub_equ_if(code);
-	
 }
 
-vector<int> passage_two(string code, map<string, int> symbol_table) {
-	code = regex_replace(code, regex(","), "");
-	auto code_vec = string_split(code, "\n");
-	vector<int> obj_code;
-	for (unsigned int i = 0; i < code_vec.size(); i++) {
-		auto instr_parse = string_split(code_vec[i], ":");
-		string temp;
-		if (instr_parse.size() > 1) 
-			temp = instr_parse[1];
-		
-		else
-			temp = instr_parse[0];
-
-		if (temp[0] == ' ')
-			temp.erase(0, 1);
-
-		instr_parse = string_split(temp, " ");
-
-		if (opcodes.count(instr_parse[0]) > 0) {
-
-			auto info = opcodes[instr_parse[0]];
-			int opcode = info.first;
-			unsigned int num_args = info.second;
-
-			if (instr_parse.size() != num_args) {
-				cout << "Erro Sintatico: numero de argumentos errados para a operacao " << instr_parse[0] << ". Linha: " << i+1 << endl;
-				throw invalid_argument("Erro Sintatico");
-			}
-
-			obj_code.push_back(opcode);
-			for (unsigned int j = 1; j < num_args; j++) {
-				if (symbol_table.count(instr_parse[j]) == 0) {
-					cout << "Erro Semantico: label " << instr_parse[j] << " nao definida. Linha: " << i+1 << endl;
-					throw invalid_argument("Erro Semantico");
-				}	
-				obj_code.push_back(symbol_table[instr_parse[j]]);
-			}
-		}
-
-		// diretiva
-		else {
-			if (instr_parse[0] == "CONST") {
-				int num;
-				if (instr_parse[1].size() > 2 && instr_parse[1][0] == '0' && instr_parse[1][1] == 'X') 
-					num = stoi(instr_parse[1], 0, 16);
-				
-				else
-					num = stoi(instr_parse[1]);
-				obj_code.push_back(num);
-			}
-
-			else if (instr_parse[0] == "SPACE")
-				obj_code.push_back(0);
-		}
-	}
-	return obj_code;
-}
-
+/* PASSAGEM 1 */
 /*
 	Summary: validacao lexica seguindo as regras da linguagem C
 	Input:
@@ -411,77 +347,216 @@ tuple< map<string, int>, map<string, int>, map<string, vector<int>> > passage_on
 	return make_tuple(symbol_table, definition_table, use_table);
 }
 
-void run(string path)
+
+/* PASSAGEM 2 */
+string int_vector2string(vector<int> int_vector)
 {
-	cout << "--->>>>> " << path << endl;
-	string str;
-	ifstream file(path);
+	string str = "";
+	for (unsigned int i = 0; i < int_vector.size(); i++)
+	{
+		str += to_string(int_vector[i]) + " ";
+	}
+	return str;
+}
+
+string tables2string(map<string, int> def_table, map<string, vector<int>> use_table)
+{
+	string str = "TABELA DEF\n";
+	map<string, int>::iterator it;
+	for (it = def_table.begin(); it != def_table.end(); it++)
+	{
+		str += it->first + " " + to_string(it->second) + "\n";
+	}
+
+	str += "\nTABELA USO\n";
+
+	map<string, vector<int>>::iterator it2;
+	for (it2 = use_table.begin(); it2 != use_table.end(); it2++)
+	{
+		for(unsigned int i = 0; i < (it2->second).size(); i++)
+		{
+			str += it2->first + " " + to_string((it2->second)[i]) + "\n";
+		}
+	}
+
+	return str;
+}
+
+string passage_two(string code, map<string, int> symbol_table) {
+	code = regex_replace(code, regex(","), "");
+	auto code_vec = string_split(code, "\n");
+	vector<int> obj_code;
+	for (unsigned int i = 0; i < code_vec.size(); i++) {
+		auto instr_parse = string_split(code_vec[i], ":");
+		string temp;
+		if (instr_parse.size() > 1) 
+			temp = instr_parse[1];
+		
+		else
+			temp = instr_parse[0];
+
+		if (temp[0] == ' ')
+			temp.erase(0, 1);
+
+		instr_parse = string_split(temp, " ");
+
+		if (opcodes.count(instr_parse[0]) > 0) {
+
+			auto info = opcodes[instr_parse[0]];
+			int opcode = info.first;
+			unsigned int num_args = info.second;
+
+			if (instr_parse.size() != num_args) {
+				cout << "Erro Sintatico: numero de argumentos errados para a operacao " << instr_parse[0] << ". Linha: " << i+1 << endl;
+				throw invalid_argument("Erro Sintatico");
+			}
+
+			obj_code.push_back(opcode);
+			for (unsigned int j = 1; j < num_args; j++) {
+				if (symbol_table.count(instr_parse[j]) == 0) {
+					cout << "Erro Semantico: label " << instr_parse[j] << " nao definida. Linha: " << i+1 << endl;
+					throw invalid_argument("Erro Semantico");
+				}	
+				obj_code.push_back(symbol_table[instr_parse[j]]);
+			}
+		}
+
+		// diretiva
+		else {
+			if (instr_parse[0] == "CONST") {
+				int num;
+				if (instr_parse[1].size() > 2 && instr_parse[1][0] == '0' && instr_parse[1][1] == 'X') 
+					num = stoi(instr_parse[1], 0, 16);
+				
+				else
+					num = stoi(instr_parse[1]);
+				obj_code.push_back(num);
+			}
+
+			else if (instr_parse[0] == "SPACE")
+				obj_code.push_back(0);
+		}
+	}
+	
+	return int_vector2string(obj_code);
+}
+
+/* MONTADOR */
+void pre_process(string file_name, string new_file)
+{
+	ifstream file(file_name);
+
+	if (file.fail())
+	{
+		cout << "Nao foi possivel abrir o arquivo " + file_name + ", verifique sua existencia e os privilegios do programa e tente novamente!" << endl;
+		exit(1);
+	}
 
 	stringstream buffer;
 	buffer << file.rdbuf();
 
-	str = buffer.str();
+	string str = buffer.str();
+
+	string code = passage_zero(str);
+
+	if(new_file == "")
+	{
+		new_file = "pre_processed_" + file_name + ".asm";
+	}
+
+	vector<string> aux = string_split(new_file, ".");
+	
+	if(aux.size() < 2)
+	{
+		new_file += ".asm";
+	}
+
+	std::ofstream out(new_file);
+    out << code;
+    out.close();
+}
+
+
+void assembler(string file_name, string obj_name)
+{
+	ifstream file(file_name);
+
+	if (file.fail())
+	{
+		cout << "Nao foi possivel abrir o arquivo " + file_name + ", verifique sua existencia e os privilegios do programa e tente novamente!" << endl;
+		exit(1);
+	}
+
+	stringstream buffer;
+	buffer << file.rdbuf();
+
+	string str = buffer.str();
 
 	str = passage_zero(str);
-
-	cout << str << endl;
-
+	
 	auto [symbol_table, definition_table, use_table] = passage_one(str);
 
-	cout << "\nTabela de simbolos:" << endl;
-	print_table(symbol_table);
+	string tables = tables2string(definition_table, use_table);
+	string code = passage_two(str, symbol_table);
 
-	cout << "\nTabela de definicoes:" << endl;
-	print_table(definition_table);
+	string output = tables + "\n" + code;
 
-	cout << "\nTabela de uso:" << endl;
-	print_use_table(use_table);
-
-	vector<int> result =  passage_two(str, symbol_table);
-	for (unsigned int i = 0; i < result.size(); i++)
+	if(obj_name == "")
 	{
-		cout << result[i] << " ";
+		obj_name = "object";
 	}
-	cout << endl;
-}
 
-void batch_run()
-{
-	run("test/fatA.asm");
-	run("test/fatB.asm");
-
-	//run("test/extern_public_test1.asm");
-	//run("test/extern_public_test2.asm");
-	//run("test/passage_one_test4_error.asm");
-	//run("test/passage_one_test5_error.asm");
-	//run("test/passage_one_test6_error.asm");
-	// run("test/passage_one_test7_error.asm");
-	// run("test/passage_two_test2.asm");
-
-}
-
-
-
-void print_use_table(map<string, vector<int>> table)
-{
-	map<string, vector<int>>::iterator it;
-	for (it = table.begin(); it != table.end(); it++)
+	vector<string> aux = string_split(obj_name, ".");
+	
+	if(aux.size() < 2)
 	{
-		cout << it->first << " ";
-		for(unsigned int i = 0; i < (it->second).size(); i++)
-		{
-			cout << (it->second)[i] << " ";
-		}
-		cout << endl;
+		obj_name += ".obj";
 	}
+
+	std::ofstream out(obj_name);
+    out << output;
+    out.close();
 }
 
+void help()
+{
+	cout << "Exemplo de uso do programa:" << endl;
+	cout << "Pre-processamento: ./montador -p codigo.asm codigo_pre_processado.obj" << endl;
+	cout << "Geracao de arquivo objeto: ./montador -o codigo.asm objeto.asm" << endl;
+}
 
-int main () {
+int main (int argc, char** argv) 
+{
+	vector<string> args(argc);
+
 	initialize_opcode_table();
 	initialize_diretives_table();
 
-	batch_run();
+	if(argc != 4)
+	{
+		cout << "Quantidade de parametros informados errada!\n" << endl;
+		help();
+		exit(1);
+	}
+
+	for (int i = 0; i < argc; i++)
+	{
+		args[i] = (string) argv[i];
+	}
+
+	if(args[1] == "-p")
+	{
+		pre_process(args[2], args[3]);
+	}else if(args[1] == "-o")
+	{
+		assembler(args[2], args[3]);
+	}else
+	{
+		cout << "Modo de uso " + args[1] + " nao suportado!\n" << endl;
+		help();
+	}
 
 	return 0;
 }
+
+
