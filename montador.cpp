@@ -28,7 +28,7 @@ string sub_equ_if(string code);
 string passage_zero(string code);
 
 bool lexical_validation(string str);
-tuple< map<string, int>, map<string, int>, map<string, vector<int>> > passage_one(string code);
+tuple< map<string, int>, map<string, int>, map<string, vector<int>>, bool> passage_one(string code);
 
 string int_vector2string(vector<int> int_vector);
 string tables2string(map<string, int> def_table, map<string, vector<int>> use_table);
@@ -129,7 +129,6 @@ string sub_equ_if(string code){
 			if(tokens.size() != 3)
 			{
 				cout << "EQU utilizado incorretamente na linha " << i << endl;
-				throw invalid_argument("Erro de pre-processamento"); 
 			}else
 			{
 				tokens[0].erase(tokens[0].size()-1, 1);
@@ -141,7 +140,6 @@ string sub_equ_if(string code){
 			if(tokens.size() != 2)
 			{
 				cout << "IF utilizado incorretamente na linha " << i << endl;
-				throw invalid_argument("Erro de pre-processamento");
 			}else{
 				if(equ_labels[tokens[1]] == "0")            
 				{
@@ -208,7 +206,7 @@ bool lexical_validation(string str)
 		map<string, int> tabela de definicoes
 		map<string, int> tabela de uso
 */
-tuple< map<string, int>, map<string, int>, map<string, vector<int>> > passage_one(string code)
+tuple< map<string, int>, map<string, int>, map<string, vector<int>>, bool> passage_one(string code)
 {
 	int pos_counter = 0;
 	code = regex_replace(code, regex(","), "");
@@ -222,6 +220,8 @@ tuple< map<string, int>, map<string, int>, map<string, vector<int>> > passage_on
 
 	bool data_flag = false;
 	bool text_flag = false;
+	bool begin_flag = false;
+	bool end_flag = false;
 	
 	for(unsigned int line_counter = 0; line_counter < lines.size(); line_counter++)
 	{
@@ -231,7 +231,6 @@ tuple< map<string, int>, map<string, int>, map<string, vector<int>> > passage_on
 		if (tokens.size() > 2)
 		{
 			cout << "Erro sintatico, duas labels na mesma linha (" << line_counter + 1 << ")" << endl;
-			throw invalid_argument("Erro Sintatico");
 		}
 
 		string instruction = lines[line_counter];
@@ -248,13 +247,11 @@ tuple< map<string, int>, map<string, int>, map<string, vector<int>> > passage_on
 			if(lexical_validation(label))
 			{
 				cout << "Erro lexico: rotulo " << label << " invalido, verifique as regras de formacao na linha " << line_counter + 1 << endl;
-				throw invalid_argument("Erro lexico");
 			}
 
 			if(symbol_table.count(label) > 0)
 			{
 				cout << "Erro semantico: rotulo " << label << " redefinido na linha " << line_counter + 1 << endl;
-				throw invalid_argument("Erro semantico");  
 			}else
 			{
 				symbol_table[label] = pos_counter;
@@ -285,7 +282,6 @@ tuple< map<string, int>, map<string, int>, map<string, vector<int>> > passage_on
 			if (data_flag)
 			{
 				cout << "Erro semantico: instrucao na secao de dados na linha " << line_counter + 1 << endl;
-				throw("Erro semantico");
 			}
 			
 			if(tokens.size() > 1)
@@ -314,24 +310,37 @@ tuple< map<string, int>, map<string, int>, map<string, vector<int>> > passage_on
 			if ((op == "CONST" || op == "SPACE") && data_flag == false)
 			{
 				cout << "Erro semantico: diretivas CONST ou SPACE utilizadas fora do segmento de dados na linha " << line_counter + 1 << endl;
-				throw("Erro semantico");
 			}else
 			if(op == "PUBLIC")
 			{
 				definition_table[tokens[1]] = pos_counter;
+			}else
+			if(op == "BEGIN")
+			{
+				begin_flag = true;
+			}else
+			if(op == "END")
+			{
+				end_flag = true;
 			}
 			pos_counter += diretives[op];
 		}else
 		{
 			cout << "Erro sintatico: operacao " << op << " nao encontrada!" << endl;
-			throw("Erro sintatico");
 		}
 	}
 
 	if(text_flag == false)
 	{
 		cout << "Erro semantico: nao existe secao de texto" << endl;
-		throw("Erro semantico");
+	}
+
+	if(begin_flag == true && end_flag == false)
+	{
+		cout << "Erro semantico: BEGIN sem END" << endl;
+	}else if(begin_flag == false && end_flag == true)
+	{
+		cout << "Erro semantico: END sem BEGIN" << endl;
 	}
 
 	map<string, int>::iterator it;
@@ -344,7 +353,7 @@ tuple< map<string, int>, map<string, int>, map<string, vector<int>> > passage_on
 		definition_table[it->first] = symbol_table[it->first];
 	}
 
-	return make_tuple(symbol_table, definition_table, use_table);
+	return make_tuple(symbol_table, definition_table, use_table, begin_flag || end_flag);
 }
 
 
@@ -379,7 +388,7 @@ string tables2string(map<string, int> def_table, map<string, vector<int>> use_ta
 		}
 	}
 
-	return str;
+	return str + "\n";
 }
 
 string passage_two(string code, map<string, int> symbol_table) {
@@ -408,14 +417,12 @@ string passage_two(string code, map<string, int> symbol_table) {
 
 			if (instr_parse.size() != num_args) {
 				cout << "Erro Sintatico: numero de argumentos errados para a operacao " << instr_parse[0] << ". Linha: " << i+1 << endl;
-				throw invalid_argument("Erro Sintatico");
 			}
 
 			obj_code.push_back(opcode);
 			for (unsigned int j = 1; j < num_args; j++) {
 				if (symbol_table.count(instr_parse[j]) == 0) {
 					cout << "Erro Semantico: label " << instr_parse[j] << " nao definida. Linha: " << i+1 << endl;
-					throw invalid_argument("Erro Semantico");
 				}	
 				obj_code.push_back(symbol_table[instr_parse[j]]);
 			}
@@ -493,13 +500,17 @@ void assembler(string file_name, string obj_name)
 	string str = buffer.str();
 
 	str = passage_zero(str);
+	string tables = "";
+	auto [symbol_table, definition_table, use_table, flag_table] = passage_one(str);
 	
-	auto [symbol_table, definition_table, use_table] = passage_one(str);
-
-	string tables = tables2string(definition_table, use_table);
+	if(flag_table)
+	{
+		tables = tables2string(definition_table, use_table);
+	}
+	
 	string code = passage_two(str, symbol_table);
 
-	string output = tables + "\n" + code;
+	string output = tables + code;
 
 	if(obj_name == "")
 	{
