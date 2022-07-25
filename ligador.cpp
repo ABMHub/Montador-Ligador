@@ -34,6 +34,7 @@ struct objeto {
   map<string, vector<int>> tabela_uso;
   map<string, int> tabela_def;
   set<int> relative_addr;
+  set<int> absolute_addr;
   int fator_correcao;
 };
 
@@ -133,17 +134,20 @@ map<string, int> create_global_table(objeto a, objeto b){
   return ret;
 }
 
-set<int> create_object_table(vector<int> obj) {
+pair<set<int>, set<int>> create_object_table(vector<int> obj) {
   set<int> relative_addr;
+  set<int> absolute_addr;
   for (unsigned int i = 0; i < obj.size(); i++) {
     unsigned int n = opcodes[obj[i]] + i;
     i++;
-    for (; i < n && i < obj.size(); i++) 
+    for (; i < n && i < obj.size(); i++) {
       relative_addr.insert(i);
+      absolute_addr.insert(obj[i]);
+    }
     
     i--;
   }
-  return relative_addr;
+  return {absolute_addr, relative_addr};
 }
 
 vector<int> fix_addr(objeto data, map<string, int> tab_global) {
@@ -159,7 +163,8 @@ vector<int> fix_addr(objeto data, map<string, int> tab_global) {
     }
   }
   for (auto it = data.relative_addr.begin(); it != data.relative_addr.end(); ++it) 
-    data.obj[*it] += data.fator_correcao;
+    if (data.absolute_addr.count(*it) == 0)
+      data.obj[*it] += data.fator_correcao;
   
   return data.obj;
 }
@@ -193,8 +198,13 @@ void link(string path1, string path2) {
 
   map<string, int> tab_global = create_global_table(objects.first, objects.second);
 
-  objects.first.relative_addr = create_object_table(objects.first.obj);
-  objects.second.relative_addr = create_object_table(objects.second.obj);
+  auto ret = create_object_table(objects.first.obj);
+  objects.first.absolute_addr = ret.first;
+  objects.first.relative_addr = ret.second;
+
+  ret = create_object_table(objects.second.obj);
+  objects.second.absolute_addr = ret.first;
+  objects.second.relative_addr = ret.second;
 
   vector<int> final_obj1 = fix_addr(objects.first, tab_global);
   vector<int> final_obj2 = fix_addr(objects.second, tab_global);
