@@ -532,8 +532,8 @@ void assembler(string file_name, string obj_name)
 void help()
 {
 	cout << "Exemplo de uso do programa:" << endl;
-	cout << "Pre-processamento: ./montador -p codigo.asm codigo_pre_processado.obj" << endl;
-	cout << "Geracao de arquivo objeto: ./montador -o codigo.asm objeto.asm" << endl;
+	cout << "Pre-processamento: ./montador -p codigo.asm codigo_pre_processado.asm" << endl;
+	cout << "Geracao de arquivo objeto: ./montador -o codigo.asm objeto.obj" << endl;
 }
 
 int main (int argc, char** argv) 
