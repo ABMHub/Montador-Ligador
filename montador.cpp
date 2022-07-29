@@ -228,9 +228,12 @@ tuple< map<string, int>, map<string, int>, map<string, vector<int>>, bool> passa
 		//Verifica se tem rotulo
 		vector<string> tokens = string_split(lines[line_counter], ":");
 
-		if (tokens.size() > 2)
+		while (tokens.size() > 2)
 		{
-			cout << "Erro sintatico, duas labels na mesma linha (" << line_counter + 1 << ")" << endl;
+			cout << "Erro sintatico, mais de um rotulo na linha (" << tokens[0] << ") " << line_counter + 1 << endl;
+			tokens.erase(tokens.begin());
+			if (tokens[0][0] == ' ')
+				tokens[0].erase(0, 1);
 		}
 
 		string instruction = lines[line_counter];
@@ -243,16 +246,17 @@ tuple< map<string, int>, map<string, int>, map<string, vector<int>>, bool> passa
 				tokens[1].erase(0, 1);
 
 			instruction = tokens[1];
-
+			bool invalid_token = false;
 			if(lexical_validation(label))
 			{
 				cout << "Erro lexico: rotulo " << label << " invalido, verifique as regras de formacao na linha " << line_counter + 1 << endl;
+				invalid_token = true;
 			}
 
 			if(symbol_table.count(label) > 0)
 			{
 				cout << "Erro semantico: rotulo " << label << " redefinido na linha " << line_counter + 1 << endl;
-			}else
+			}else if (! invalid_token)
 			{
 				symbol_table[label] = pos_counter;
 
@@ -417,6 +421,7 @@ string passage_two(string code, map<string, int> symbol_table) {
 
 			if (instr_parse.size() != num_args) {
 				cout << "Erro Sintatico: numero de argumentos errados para a operacao " << instr_parse[0] << ". Linha: " << i+1 << endl;
+				continue;
 			}
 
 			obj_code.push_back(opcode);
