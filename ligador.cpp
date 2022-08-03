@@ -222,7 +222,7 @@ int main (int argc, char** argv) {
   }
 
   if (argc != 3) {
-    cout << "Passe apenas as duas paths de input para a ligacao: ./ligador myfile1.o myfile2.o" << endl << "Encerrando..." << endl;
+    cout << "Passe apenas as duas paths de input para a ligacao: ./ligador myfile1.obj myfile2.obj" << endl << "Encerrando..." << endl;
     return 0;
   }
 
