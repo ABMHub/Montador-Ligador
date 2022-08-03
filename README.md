@@ -23,8 +23,8 @@ Os programas foram feitos em Linux e, já que escrevem em arquivos durante a exe
 ### Montador
 
 ```bash
-./montador -p codigo.asm codigo_pre_processado.asm
-./montador -o codigo.asm objeto.obj
+./montador.out -p codigo.asm codigo_pre_processado.asm
+./montador.out -o codigo.asm objeto.obj
 ```
 
 Para pré-processamento e geração de código objeto, respectivamente
@@ -32,7 +32,7 @@ Para pré-processamento e geração de código objeto, respectivamente
 ### Ligador
 
 ```bash
-./ligador myfile1.obj myfile2.obj
+./ligador.out myfile1.obj myfile2.obj
 ```
 
 O output do ligador será salvo como `./output.bin`
